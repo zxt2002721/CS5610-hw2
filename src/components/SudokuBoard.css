@@ -1,0 +1,7 @@
+.cell-wrapper {
+    display: flex;
+}
+
+.sudoku-cell {
+  border: none !important; /* Wrapper handles borders */
+}
