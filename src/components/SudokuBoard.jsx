@@ -8,7 +8,7 @@ const SudokuBoard = () => {
   const { 
     board, 
     initialBoard, 
-    gameMode, 
+    difficulty, 
     selectedCell, 
     setSelectedCell, 
     updateCell,
@@ -20,7 +20,7 @@ const SudokuBoard = () => {
       if (isGameOver || !selectedCell) return;
 
       const { row, col } = selectedCell;
-      const size = gameMode === 'easy' ? 6 : 9;
+      const size = difficulty === 'easy' ? 6 : 9;
 
       // Number input
       if (e.key >= '1' && e.key <= size.toString()) {
@@ -51,13 +51,13 @@ const SudokuBoard = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCell, isGameOver, gameMode, updateCell, setSelectedCell]);
+  }, [selectedCell, isGameOver, difficulty, updateCell, setSelectedCell]);
 
   if (!board) return <div className="loading">Loading board...</div>;
 
-  const size = gameMode === 'easy' ? 6 : 9;
+  const size = difficulty === 'easy' ? 6 : 9;
   const boxWidth = 3;
-  const boxHeight = gameMode === 'easy' ? 2 : 3;
+  const boxHeight = difficulty === 'easy' ? 2 : 3;
   
   // CSS Grid template
   const gridStyle = {
@@ -71,7 +71,7 @@ const SudokuBoard = () => {
   };
 
   return (
-    <div className={`sudoku-board mode-${gameMode}`} style={gridStyle}>
+    <div className={`sudoku-board mode-${difficulty}`} style={gridStyle}>
       {board.map((row, rIndex) => (
         row.map((cellValue, cIndex) => {
           const isInitial = initialBoard[rIndex][cIndex] !== 0;

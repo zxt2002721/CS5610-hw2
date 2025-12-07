@@ -4,72 +4,71 @@ import Navbar from '../components/Navbar';
 import SudokuBoard from '../components/SudokuBoard';
 import Timer from '../components/Timer';
 import { useGame } from '../context/GameContext';
+import { useAuth } from '../context/AuthContext';
 import './Game.css';
 
 const Game = () => {
-  const { mode } = useParams(); // 'easy' or 'normal'
+  const { id } = useParams();
   const navigate = useNavigate();
-  const { 
-    startNewGame, 
-    resetGame, 
-    isGameOver, 
-    isWon, 
-    getHint, 
-    gameMode, 
-    board, 
-    isLoaded 
+  const { user } = useAuth();
+  const {
+    resetGame,
+    isGameOver,
+    isWon,
+    getHint,
+    difficulty,
+    loadGame,
+    board,
+    gameName,
+    loading,
   } = useGame();
 
   useEffect(() => {
-    if (mode !== 'easy' && mode !== 'normal') {
+    if (!id) {
       navigate('/games');
       return;
     }
+    loadGame(id).catch(() => navigate('/games'));
+  }, [id, navigate, loadGame]);
 
-    if (isLoaded) {
-      // If no board or mode mismatch, start new game.
-      // Also if game is over, we probably want to start new? 
-      // Or if the user navigated here specifically?
-      // If I have a saved game that is OVER, it should have been cleared.
-      
-      // If gameMode exists and matches mode, we resume (don't call startNewGame).
-      // Otherwise, start new.
-      if (!board || gameMode !== mode) {
-        startNewGame(mode);
-      }
-    }
-  }, [mode, isLoaded, navigate]); // board and gameMode are checked inside but adding them to dependency might cause loop if startNewGame updates them.
-  // We rely on isLoaded turning true once. And mode changing.
-  // If board changes, we don't want to re-run this effect unless mode changed?
-  // Correct.
-
-  if (!isLoaded || (!board && isLoaded)) return <div className="loading">Loading...</div>;
-  // Note: if !board and isLoaded, effect will trigger startNewGame, so we show loading briefly.
+  if (loading || !board) return <div className="loading">Loading...</div>;
 
   return (
-      <div className="page game-page">
-        <Navbar />
-        <div className="game-container">
-          <div className="header">
-             <h2>{mode === 'easy' ? 'Easy' : 'Normal'} Mode</h2>
-             <Timer />
+    <div className="page game-page">
+      <Navbar />
+      <div className="game-container">
+        <div className="header">
+          <div>
+            <h2>{gameName || 'Sudoku Game'}</h2>
+            <p className="subheading">{difficulty === 'easy' ? 'Easy' : 'Normal'} mode</p>
           </div>
-          
-          {isGameOver && (
-             <div className={`game-over ${isWon ? 'won' : ''}`}>
-                {isWon ? 'Congratulations! You Solved It!' : 'Game Over'}
-             </div>
-          )}
-          
-          <SudokuBoard />
-          
-          <div className="controls">
-            <button onClick={() => startNewGame(mode)}>New Game</button>
-            <button onClick={resetGame}>Reset</button>
-            <button onClick={getHint} disabled={isGameOver}>Hint</button>
+          <Timer />
+        </div>
+
+        {!user && (
+          <div className="notice">
+            Logged out users can view the board but must login to make moves.
           </div>
+        )}
+
+        {isGameOver && (
+          <div className={`game-over ${isWon ? 'won' : ''}`}>
+            {isWon ? 'Congratulations! You solved it!' : 'Game Over'}
+          </div>
+        )}
+
+        <SudokuBoard />
+
+        <div className="controls">
+          <button onClick={resetGame} disabled={!user}>
+            Reset
+          </button>
+          <button onClick={getHint} disabled={isGameOver || !user}>
+            Hint
+          </button>
         </div>
       </div>
+    </div>
   );
 };
 

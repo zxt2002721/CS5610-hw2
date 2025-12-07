@@ -1,205 +1,162 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { generateBoard, isValid } from '../utils/sudokuGenerator';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from 'react';
+import { isValid } from '../utils/sudokuGenerator';
+import { useAuth } from './AuthContext';
 
 const GameContext = createContext();
 
 export const useGame = () => useContext(GameContext);
 
+const cloneBoard = (b) => b.map((row) => [...row]);
+
 export const GameProvider = ({ children }) => {
+  const { user } = useAuth();
   const [board, setBoard] = useState(null);
   const [initialBoard, setInitialBoard] = useState(null);
-  const [solvedBoard, setSolvedBoard] = useState(null);
-  const [gameMode, setGameMode] = useState(null); // 'easy' or 'normal'
+  const [solutionBoard, setSolutionBoard] = useState(null);
+  const [difficulty, setDifficulty] = useState(null);
+  const [gameId, setGameId] = useState(null);
+  const [gameName, setGameName] = useState('');
   const [isGameOver, setIsGameOver] = useState(false);
+  const [isWon, setIsWon] = useState(false);
   const [timer, setTimer] = useState(0);
   const [selectedCell, setSelectedCell] = useState(null);
-  const [isWon, setIsWon] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Load from local storage on mount
-  useEffect(() => {
-    const savedState = localStorage.getItem('sudokuState');
-    if (savedState) {
-      try {
-        const parsed = JSON.parse(savedState);
-        // Simple validation
-        if (parsed.board && parsed.initialBoard) {
-          setBoard(parsed.board);
-          setInitialBoard(parsed.initialBoard);
-          setSolvedBoard(parsed.solvedBoard);
-          setGameMode(parsed.gameMode);
-          setTimer(parsed.timer);
-          setIsGameOver(parsed.isGameOver);
-          setIsWon(parsed.isWon);
-        }
-      } catch (e) {
-        console.error("Failed to parse saved game state", e);
-      }
-    }
-    setIsLoaded(true);
-  }, []);
-
-  // Save to local storage on change
-  useEffect(() => {
-    if (!isLoaded) return; // Don't save before load
-    if (isGameOver) return; // Don't save if game over (handled by clearing)
-
-    if (board) {
-      const stateToSave = {
-        board,
-        initialBoard,
-        solvedBoard,
-        gameMode,
-        timer,
-        isGameOver,
-        isWon
-      };
-      localStorage.setItem('sudokuState', JSON.stringify(stateToSave));
-    }
-  }, [board, initialBoard, solvedBoard, gameMode, timer, isGameOver, isWon, isLoaded]);
-
-  // Timer logic
   useEffect(() => {
     let interval;
     if (board && !isGameOver) {
-      interval = setInterval(() => {
-        setTimer(prev => prev + 1);
-      }, 1000);
+      interval = setInterval(() => setTimer((t) => t + 1), 1000);
     }
     return () => clearInterval(interval);
   }, [board, isGameOver]);
 
-  const startNewGame = (mode) => {
-    const size = mode === 'easy' ? 6 : 9;
-    const { initial, solved } = generateBoard(size);
-    
-    // Deep copy for current playing board
-    const playingBoard = JSON.parse(JSON.stringify(initial));
-
-    setBoard(playingBoard);
-    setInitialBoard(initial); // This one won't change
-    setSolvedBoard(solved);
-    setGameMode(mode);
-    setTimer(0);
-    setIsGameOver(false);
-    setIsWon(false);
-    setSelectedCell(null);
-    // Clear old game state from storage is implied by new save, 
-    // but explicit removal might be safer to avoid mixing.
-    // But the useEffect will overwrite it immediately.
-    localStorage.removeItem('sudokuState'); 
-  };
+  const loadGame = useCallback(async (id) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/sudoku/${id}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Unable to load game');
+      const data = await res.json();
+      if (!data.initialBoard || !data.solutionBoard) {
+        throw new Error('Invalid game payload');
+      }
+      setGameId(id);
+      setDifficulty(data.difficulty);
+      setInitialBoard(cloneBoard(data.initialBoard));
+      setSolutionBoard(data.solutionBoard);
+      setBoard(data.hasCompleted ? cloneBoard(data.solutionBoard) : cloneBoard(data.initialBoard));
+      setGameName(data.name);
+      setIsWon(!!data.hasCompleted);
+      setIsGameOver(!!data.hasCompleted);
+      setTimer(0);
+      setSelectedCell(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const resetGame = () => {
-    if (initialBoard) {
-      setBoard(JSON.parse(JSON.stringify(initialBoard)));
-      setTimer(0);
-      setIsGameOver(false);
-      setIsWon(false);
-      setSelectedCell(null);
+    if (!initialBoard) return;
+    setBoard(cloneBoard(initialBoard));
+    setIsGameOver(false);
+    setIsWon(false);
+    setTimer(0);
+    setSelectedCell(null);
+  };
+
+  const submitWin = async (currentBoard) => {
+    try {
+      await fetch('/api/highscore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ gameId, board: currentBoard, time: timer }),
+      });
+    } catch (err) {
+      console.error('Failed to record win', err);
+    }
+  };
+
+  const checkCompletion = (currentBoard) => {
+    if (!solutionBoard) return;
+    const flatCurrent = currentBoard.flat();
+    const flatSolution = solutionBoard.flat();
+    const filled = flatCurrent.every((n) => n !== 0);
+    if (!filled) return;
+
+    const matches = flatCurrent.every((n, idx) => Number(n) === Number(flatSolution[idx]));
+    if (matches) {
+      setIsGameOver(true);
+      setIsWon(true);
+      if (user) submitWin(currentBoard);
     }
   };
 
   const updateCell = (row, col, value) => {
-    if (isGameOver) return;
-    if (initialBoard[row][col] !== 0) return; // Cannot edit initial cells
+    if (isGameOver || !board) return;
+    if (!user) return; // logged out users can view only
+    if (initialBoard[row][col] !== 0) return;
 
-    const newBoard = [...board];
-    newBoard[row] = [...newBoard[row]];
+    const newBoard = cloneBoard(board);
     newBoard[row][col] = value;
     setBoard(newBoard);
-
     checkCompletion(newBoard);
   };
 
-  const checkCompletion = (currentBoard) => {
-    // Check if full
-    const size = gameMode === 'easy' ? 6 : 9;
-    let isFull = true;
-    for(let r=0; r<size; r++) {
-      for(let c=0; c<size; c++) {
-        if (currentBoard[r][c] === 0) {
-          isFull = false;
-          break;
-        }
-      }
-    }
-
-    if (isFull) {
-      // Check validity
-      let valid = true;
-      for(let r=0; r<size; r++) {
-        for(let c=0; c<size; c++) {
-          if (currentBoard[r][c] !== solvedBoard[r][c]) {
-            valid = false;
-            break;
-          }
-        }
-      }
-
-      if (valid) {
-        setIsWon(true);
-        setIsGameOver(true);
-        localStorage.removeItem('sudokuState'); 
-      }
-    }
-  };
-  
   const getHint = () => {
     if (isGameOver || !board) return;
-    const size = gameMode === 'easy' ? 6 : 9;
-    
-    // Strategy: Find a cell with only 1 valid number given current board state
-    let foundHint = false;
-
-    for(let r=0; r<size; r++) {
-      for(let c=0; c<size; c++) {
+    const size = difficulty === 'easy' ? 6 : 9;
+    for (let r = 0; r < size; r += 1) {
+      for (let c = 0; c < size; c += 1) {
         if (board[r][c] === 0) {
           let validCount = 0;
-          for(let num=1; num<=size; num++) {
-             if (isValid(board, r, c, num, size)) {
-               validCount++;
-             }
+          for (let n = 1; n <= size; n += 1) {
+            if (isValid(board, r, c, n, size)) validCount += 1;
           }
-          
           if (validCount === 1) {
-             setSelectedCell({ row: r, col: c, isHint: true });
-             foundHint = true;
-             return;
-          }
-        }
-      }
-    }
-    
-    // Fallback
-    if (!foundHint) {
-      for(let r=0; r<size; r++) {
-        for(let c=0; c<size; c++) {
-          if (board[r][c] === 0) {
             setSelectedCell({ row: r, col: c, isHint: true });
             return;
           }
         }
       }
     }
+    // fallback to first empty cell
+    for (let r = 0; r < size; r += 1) {
+      for (let c = 0; c < size; c += 1) {
+        if (board[r][c] === 0) {
+          setSelectedCell({ row: r, col: c, isHint: true });
+          return;
+        }
+      }
+    }
   };
 
   return (
-    <GameContext.Provider value={{
-      board,
-      initialBoard,
-      gameMode,
-      timer,
-      isGameOver,
-      isWon,
-      startNewGame,
-      resetGame,
-      updateCell,
-      selectedCell,
-      setSelectedCell,
-      getHint,
-      isLoaded
-    }}>
+    <GameContext.Provider
+      value={{
+        board,
+        initialBoard,
+        solutionBoard,
+        difficulty,
+        timer,
+        isGameOver,
+        isWon,
+        resetGame,
+        updateCell,
+        selectedCell,
+        setSelectedCell,
+        getHint,
+        loadGame,
+        gameId,
+        gameName,
+        loading,
+      }}
+    >
       {children}
     </GameContext.Provider>
   );
