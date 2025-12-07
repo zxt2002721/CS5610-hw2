@@ -1,27 +1,23 @@
-const fs = require('fs');
-const path = require('path');
-const wordListPath = require('word-list');
+const baseWords = [
+  'Cedar', 'Maple', 'Ocean', 'Aurora', 'Cobalt', 'Amber', 'Velvet', 'Echo', 'Quartz',
+  'Nova', 'Harbor', 'Pioneer', 'Saffron', 'Indigo', 'Glacier', 'Prairie', ' Summit',
+  'Orchid', 'Marble', 'Copper', 'Canyon', 'Nimbus', 'Clover', 'Voyage', 'Horizon',
+  'Lotus', 'Sierra', 'Cascade', 'Vertex', 'Arbor', 'Nimbus', 'Zephyr', 'Monarch',
+  'Harbor', 'Juniper', 'Bamboo', 'Ivory', 'Sable', 'Slate', 'Crimson', 'Denim',
+  'Pebble', 'Galaxy', 'Meteor', 'Fjord', 'Lagoon', 'Meadow', 'Timber', 'Moss', 'Flint',
+];
 
-const rawWords = fs
-  .readFileSync(path.resolve(wordListPath), 'utf8')
-  .split('\n')
-  .filter((w) => w.length >= 3 && w.length <= 10);
+const pick = () => baseWords[Math.floor(Math.random() * baseWords.length)] || 'Puzzle';
 
-const pickWord = () => {
-  const index = Math.floor(Math.random() * rawWords.length);
-  const word = rawWords[index] || 'puzzle';
-  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-};
+const buildName = () => `${pick()} ${pick()} ${pick()}`.replace(/\s+/g, ' ').trim();
 
-const buildName = () => `${pickWord()} ${pickWord()} ${pickWord()}`;
-
-// Tries to generate a unique name by checking the Game collection.
+// Attempt to generate a unique name given a Game model.
 const generateUniqueName = async (GameModel) => {
   for (let i = 0; i < 20; i += 1) {
-    const nameCandidate = buildName();
+    const candidate = buildName();
     // eslint-disable-next-line no-await-in-loop
-    const exists = await GameModel.exists({ name: nameCandidate });
-    if (!exists) return nameCandidate;
+    const exists = await GameModel.exists({ name: candidate });
+    if (!exists) return candidate;
   }
   return `${buildName()}-${Date.now()}`;
 };
