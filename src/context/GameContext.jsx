@@ -22,6 +22,7 @@ export const GameProvider = ({ children }) => {
   const [difficulty, setDifficulty] = useState(null);
   const [gameId, setGameId] = useState(null);
   const [gameName, setGameName] = useState('');
+  const [createdBy, setCreatedBy] = useState('');
   const [isGameOver, setIsGameOver] = useState(false);
   const [isWon, setIsWon] = useState(false);
   const [timer, setTimer] = useState(0);
@@ -51,6 +52,7 @@ export const GameProvider = ({ children }) => {
       setSolutionBoard(data.solutionBoard);
       setBoard(data.hasCompleted ? cloneBoard(data.solutionBoard) : cloneBoard(data.initialBoard));
       setGameName(data.name);
+      setCreatedBy(data.createdBy || '');
       setIsWon(!!data.hasCompleted);
       setIsGameOver(!!data.hasCompleted);
       setTimer(0);
@@ -155,6 +157,7 @@ export const GameProvider = ({ children }) => {
         gameId,
         gameName,
         loading,
+        createdBy,
       }}
     >
       {children}

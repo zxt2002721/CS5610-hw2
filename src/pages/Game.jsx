@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import SudokuBoard from '../components/SudokuBoard';
@@ -10,6 +10,8 @@ import './Game.css';
 const Game = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const { user } = useAuth();
   const {
     resetGame,
@@ -21,6 +23,7 @@ const Game = () => {
     board,
     gameName,
     loading,
+    createdBy,
   } = useGame();
 
   useEffect(() => {
@@ -31,7 +34,32 @@ const Game = () => {
     loadGame(id).catch(() => navigate('/games'));
   }, [id, navigate, loadGame]);
 
+  const handleDelete = async () => {
+    if (!id) return;
+    const confirmed = window.confirm('Delete this game? This also removes related wins.');
+    if (!confirmed) return;
+    setError('');
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/sudoku/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const msg = (await res.json().catch(() => ({}))).error || 'Failed to delete game';
+        throw new Error(msg);
+      }
+      navigate('/games');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading || !board) return <div className="loading">Loading...</div>;
+
+  const canDelete = user && createdBy && user.username === createdBy;
 
   return (
     <div className="page game-page">
@@ -51,6 +79,8 @@ const Game = () => {
           </div>
         )}
 
+        {error && <div className="error">{error}</div>}
+
         {isGameOver && (
           <div className={`game-over ${isWon ? 'won' : ''}`}>
             {isWon ? 'Congratulations! You solved it!' : 'Game Over'}
@@ -66,6 +96,11 @@ const Game = () => {
           <button onClick={getHint} disabled={isGameOver || !user}>
             Hint
           </button>
+          {canDelete && (
+            <button onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </button>
+          )}
         </div>
       </div>
     </div>
